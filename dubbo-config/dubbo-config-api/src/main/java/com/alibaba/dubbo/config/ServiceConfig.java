@@ -351,6 +351,11 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         if (anyhost) {
             map.put(Constants.ANYHOST_KEY, "true");
         }
+        if (provider.getDocker() != null && provider.getDocker().equals("true")) {
+            map.put("docker", "true");
+        } else {
+            map.put("docker", "false");
+        }
         map.put(Constants.SIDE_KEY, Constants.PROVIDER_SIDE);
         map.put(Constants.DUBBO_VERSION_KEY, Version.getVersion());
         map.put(Constants.TIMESTAMP_KEY, String.valueOf(System.currentTimeMillis()));
