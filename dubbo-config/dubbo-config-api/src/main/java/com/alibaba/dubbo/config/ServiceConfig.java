@@ -351,7 +351,7 @@ public class ServiceConfig<T> extends AbstractServiceConfig {
         if (anyhost) {
             map.put(Constants.ANYHOST_KEY, "true");
         }
-        if (provider.getDocker() != null && provider.getDocker().equals("true")) {
+        if (protocolConfig.getDocker() != null && protocolConfig.getDocker().equals("true")) {
             map.put("docker", "true");
         } else {
             map.put("docker", "false");

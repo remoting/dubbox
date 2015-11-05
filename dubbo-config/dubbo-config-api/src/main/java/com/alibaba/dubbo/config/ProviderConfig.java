@@ -45,14 +45,6 @@ public class ProviderConfig extends AbstractServiceConfig {
 
     // 服务端口
     private Integer             port;
-    private String              docker;
-    public String getDocker() {
-        return docker;
-    }
-
-    public void setDocker(String docker) {
-        this.docker = docker;
-    }
     // 上下
     private String              contextpath;
 
