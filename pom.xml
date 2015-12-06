@@ -751,12 +751,12 @@
     	<repository>  
             <id>nexus-releases</id>  
             <name>Nexus Release Repository</name>  
-            <url>http://192.168.1.51:8081/nexus/content/repositories/thirdparty</url>  
+            <url>http://192.168.1.51:8081/nexus/content/repositories/thirdparty</url>
         </repository>
         <snapshotRepository>  
             <id>nexus-snapshots</id>  
             <name>nexus snapshot repository</name>  
-            <url>http://192.168.1.51:8081/nexus/content/repositories/thirdparty</url>  
+            <url>http://192.168.1.51:8081/nexus/content/repositories/thirdparty</url>
         </snapshotRepository>  
     </distributionManagement>  
 </project>

@@ -15,6 +15,9 @@
  */
 package com.alibaba.dubbo.monitor.dubbo;
 
+import java.lang.reflect.Array;
+import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +28,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.alibaba.dubbo.common.Constants;
 import com.alibaba.dubbo.common.URL;
 import com.alibaba.dubbo.common.logger.Logger;
 import com.alibaba.dubbo.common.logger.LoggerFactory;
@@ -56,7 +60,7 @@ public class DubboMonitor implements Monitor {
 
     private final long monitorInterval;
     
-    private final ConcurrentMap<Statistics, AtomicReference<long[]>> statisticsMap = new ConcurrentHashMap<Statistics, AtomicReference<long[]>>();
+    private final ConcurrentMap<LogModel, List<String>> statisticsMap = new ConcurrentHashMap<LogModel, List<String>>();
 
     public DubboMonitor(Invoker<MonitorService> monitorInvoker, MonitorService monitorService) {
         this.monitorInvoker = monitorInvoker;
@@ -80,106 +84,46 @@ public class DubboMonitor implements Monitor {
             logger.info("Send statistics to monitor " + getUrl());
         }
         String timestamp = String.valueOf(System.currentTimeMillis());
-        for (Map.Entry<Statistics, AtomicReference<long[]>> entry : statisticsMap.entrySet()) {
+        for (Map.Entry<LogModel, List<String>> entry : statisticsMap.entrySet()) {
             // 获取已统计数据
-            Statistics statistics = entry.getKey();
-            AtomicReference<long[]> reference = entry.getValue();
-            long[] numbers = reference.get();
-            long success = numbers[0];
-            long failure = numbers[1];
-            long input = numbers[2];
-            long output = numbers[3];
-            long elapsed = numbers[4];
-            long concurrent = numbers[5];
-            long maxInput = numbers[6];
-            long maxOutput = numbers[7];
-            long maxElapsed = numbers[8];
-            long maxConcurrent = numbers[9];
-             
-            // 发送汇总信息
-            URL url = statistics.getUrl()
-                    .addParameters(MonitorService.TIMESTAMP, timestamp,
-                            MonitorService.SUCCESS, String.valueOf(success),
-                            MonitorService.FAILURE, String.valueOf(failure), 
-                            MonitorService.INPUT, String.valueOf(input), 
-                            MonitorService.OUTPUT, String.valueOf(output),
-                            MonitorService.ELAPSED, String.valueOf(elapsed),
-                            MonitorService.CONCURRENT, String.valueOf(concurrent),
-                            MonitorService.MAX_INPUT, String.valueOf(maxInput),
-                            MonitorService.MAX_OUTPUT, String.valueOf(maxOutput),
-                            MonitorService.MAX_ELAPSED, String.valueOf(maxElapsed),
-                            MonitorService.MAX_CONCURRENT, String.valueOf(maxConcurrent)
-                            );
-            monitorService.collect(url);
-            
+            LogModel statistics = entry.getKey();
+            URL url = new URL(Constants.COUNT_PROTOCOL, statistics.getHost(), statistics.getPort(), statistics.getSide());
+            List<String> reference = entry.getValue();
+            StringBuffer sb = new StringBuffer();
+            for (int i=0;i<reference.size();i++){
+                sb.append(reference.get(i)+";");
+            }
+            url = url.addParameter(statistics.getService(), sb.toString());
             // 减掉已统计数据
-            long[] current;
-            long[] update = new long[LENGTH];
-            do {
-                current = reference.get();
-                if (current == null) {
-                    update[0] = 0;
-                    update[1] = 0;
-                    update[2] = 0;
-                    update[3] = 0;
-                    update[4] = 0;
-                    update[5] = 0;
-                } else {
-                    update[0] = current[0] - success;
-                    update[1] = current[1] - failure;
-                    update[2] = current[2] - input;
-                    update[3] = current[3] - output;
-                    update[4] = current[4] - elapsed;
-                    update[5] = current[5] - concurrent;
-                }
-            } while (! reference.compareAndSet(current, update));
+            reference.clear();
+            monitorService.collect(url);
         }
     }
     
     public void collect(URL url) {
         // 读写统计变量
-        int success = url.getParameter(MonitorService.SUCCESS, 0);
-        int failure = url.getParameter(MonitorService.FAILURE, 0);
-        int input = url.getParameter(MonitorService.INPUT, 0);
-        int output = url.getParameter(MonitorService.OUTPUT, 0);
-        int elapsed = url.getParameter(MonitorService.ELAPSED, 0);
-        int concurrent = url.getParameter(MonitorService.CONCURRENT, 0);
+        String method = url.getParameter(MonitorService.METHOD);
+        String success = url.getParameter(MonitorService.SUCCESS);
+        String elapsed = url.getParameter(MonitorService.ELAPSED);
+        String start = url.getParameter(MonitorService.TIMESTAMP);
+        String side = url.getParameter(Constants.SIDE_KEY);
+        String remote = "";
+        if (Constants.CONSUMER_SIDE.equals(side)) {
+            remote = url.getParameter(MonitorService.PROVIDER);
+        }else{
+            remote = url.getParameter(MonitorService.CONSUMER);
+        }
         // 初始化原子引用
-        Statistics statistics = new Statistics(url);
-        AtomicReference<long[]> reference = statisticsMap.get(statistics);
+        LogModel log = new LogModel(url);
+        List<String> reference = statisticsMap.get(log);
         if (reference == null) {
-            statisticsMap.putIfAbsent(statistics, new AtomicReference<long[]>());
-            reference = statisticsMap.get(statistics);
+            statisticsMap.putIfAbsent(log, new ArrayList<String>());
+            reference = statisticsMap.get(log);
         }
         // CompareAndSet并发加入统计数据
-        long[] current;
-        long[] update = new long[LENGTH];
-        do {
-            current = reference.get();
-            if (current == null) {
-                update[0] = success;
-                update[1] = failure;
-                update[2] = input;
-                update[3] = output;
-                update[4] = elapsed;
-                update[5] = concurrent;
-                update[6] = input;
-                update[7] = output;
-                update[8] = elapsed;
-                update[9] = concurrent;
-            } else {
-                update[0] = current[0] + success;
-                update[1] = current[1] + failure;
-                update[2] = current[2] + input;
-                update[3] = current[3] + output;
-                update[4] = current[4] + elapsed;
-                update[5] = (current[5] + concurrent) / 2;
-                update[6] = current[6] > input ? current[6] : input;
-                update[7] = current[7] > output ? current[7] : output;
-                update[8] = current[8] > elapsed ? current[8] : elapsed;
-                update[9] = current[9] > concurrent ? current[9] : concurrent;
-            }
-        } while (! reference.compareAndSet(current, update));
+
+        reference.add(method+","+success+","+elapsed+","+start+","+remote);
+        statisticsMap.replace(log,reference);
     }
 
 	public List<URL> lookup(URL query) {
