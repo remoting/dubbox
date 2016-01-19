@@ -47,7 +47,7 @@ public class MonitorFilter implements Filter {
 
     private static final Logger logger = LoggerFactory.getLogger(MonitorFilter.class);
     
-    //private final ConcurrentMap<String, AtomicInteger> concurrents = new ConcurrentHashMap<String, AtomicInteger>();
+    private final ConcurrentMap<String, AtomicInteger> concurrents = new ConcurrentHashMap<String, AtomicInteger>();
     
     private MonitorFactory monitorFactory;
     
@@ -60,7 +60,7 @@ public class MonitorFilter implements Filter {
         if (invoker.getUrl().hasParameter(Constants.MONITOR_KEY)) {
             RpcContext context = RpcContext.getContext(); // 提供方必须在invoke()之前获取context信息
             long start = System.currentTimeMillis(); // 记录起始时间戮
-            //getConcurrent(invoker, invocation).incrementAndGet(); // 并发计数
+            getConcurrent(invoker, invocation).incrementAndGet(); // 并发计数
             try {
                 Result result = invoker.invoke(invocation); // 让调用链往下执行
                 collect(invoker, invocation, result, context, start, false);
@@ -69,7 +69,7 @@ public class MonitorFilter implements Filter {
                 collect(invoker, invocation, null, context, start, true);
                 throw e;
             } finally {
-                //getConcurrent(invoker, invocation).decrementAndGet(); // 并发计数
+                getConcurrent(invoker, invocation).decrementAndGet(); // 并发计数
             }
         } else {
             return invoker.invoke(invocation);
@@ -81,6 +81,7 @@ public class MonitorFilter implements Filter {
         try {
             // ---- 服务信息获取 ----
             long elapsed = System.currentTimeMillis() - start; // 计算调用耗时
+            int concurrent = getConcurrent(invoker, invocation).get(); // 当前并发数
             String application = invoker.getUrl().getParameter(Constants.APPLICATION_KEY);
             String service = invoker.getInterface().getName(); // 获取服务名称
             String method = RpcUtils.getMethodName(invocation); // 获取方法名
@@ -108,7 +109,6 @@ public class MonitorFilter implements Filter {
             if (result != null && result.getAttachment(Constants.OUTPUT_KEY) != null) {
                 output = result.getAttachment(Constants.OUTPUT_KEY);
             }
-            /*
             monitor.collect(new URL(Constants.COUNT_PROTOCOL,
                                 NetUtils.getLocalHost(), localPort,
                                 service + "/" + method,
@@ -121,23 +121,12 @@ public class MonitorFilter implements Filter {
                                 MonitorService.CONCURRENT, String.valueOf(concurrent),
                                 Constants.INPUT_KEY, input,
                                 Constants.OUTPUT_KEY, output));
-            */
-            URL log = new URL(Constants.COUNT_PROTOCOL,invoker.getUrl().getHost(),invoker.getUrl().getPort());
-            log = log.addParameter(Constants.SIDE_KEY,invoker.getUrl().getParameter(Constants.SIDE_KEY));
-            log = log.addParameter(MonitorService.APPLICATION,application);
-            log = log.addParameter(MonitorService.INTERFACE,service);
-            log = log.addParameter(MonitorService.METHOD, method);
-            log = log.addParameter(MonitorService.SUCCESS,!error);
-            log = log.addParameter(MonitorService.ELAPSED,elapsed);
-            log = log.addParameter(MonitorService.TIMESTAMP,start);
-            log = log.addParameter(remoteKey,remoteValue);
-            monitor.collect(log);
         } catch (Throwable t) {
             logger.error("Failed to monitor count service " + invoker.getUrl() + ", cause: " + t.getMessage(), t);
         }
     }
     
-    /*
+    // 获取并发计数器
     private AtomicInteger getConcurrent(Invoker<?> invoker, Invocation invocation) {
         String key = invoker.getInterface().getName() + "." + invocation.getMethodName();
         AtomicInteger concurrent = concurrents.get(key);
@@ -147,5 +136,5 @@ public class MonitorFilter implements Filter {
         }
         return concurrent;
     }
-    */
+
 }
